@@ -1,7 +1,5 @@
-# WCD Marketplace
+# WCD Marketplace 2.1
 
-Plataforma digital de catálogo y pedidos para World Connect Distribution.
+Home comercial, promociones, productos, búsqueda y carrito lateral de demostración.
 
-## Cloudflare Pages
-- Build command: `npm run build`
-- Build output directory: `dist`
+Cloudflare: React Vite / npm run build / dist.

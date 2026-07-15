@@ -1,38 +1,15 @@
-import React, {useState} from 'react';
-import {createRoot} from 'react-dom/client';
-import {Search, ShoppingCart, FileText, Package, Flame} from 'lucide-react';
-import './styles.css';
-
+import React,{useMemo,useState}from'react';
+import{createRoot}from'react-dom/client';
+import{Search,ShoppingCart,Plus,Minus,FileText,Package,X,Flame}from'lucide-react';
+import'./styles.css';
 const products=[
-{id:'000190',brand:'DEL FRUTAL',name:'Del Frutal Orange PET 500 ml',price:24,promo:'5 cajas + 1 caja gratis'},
-{id:'000229',brand:'DE MI PAÍS',name:'Leche de Coco Guanábana',price:25,promo:'Precio de promoción'},
-{id:'000713',brand:'RAPTOR',name:'Raptor Lava 473 ml',price:60.14,promo:'Compra 4 cajas y recibe 1 gratis'}
-];
-
-function ProductCard({p}){return <article className="card">
-<div className="img"><Package size={58}/><span>Imagen desde Supabase</span></div>
-<div className="content"><span className="brandname">{p.brand}</span><h3>{p.name}</h3>
-<p>ITEM # {p.id}</p><div className="promo">{p.promo}</div>
-<div className="price">${p.price.toFixed(2)}</div><button>Agregar al pedido</button></div></article>}
-
-function App(){
-const [q,setQ]=useState('');
-const filtered=products.filter(p=>`${p.brand} ${p.name} ${p.id}`.toLowerCase().includes(q.toLowerCase()));
-return <div>
-<header><div className="brand"><img src="/wcd-logo.png"/><div><strong>WCD Marketplace</strong><span>Productos que te conectan con tu tierra</span></div></div>
-<nav><a href="#inicio">Inicio</a><a href="#productos">Productos</a><a href="#pdf">Catálogo PDF</a><button className="cart"><ShoppingCart size={18}/> Mi pedido</button></nav></header>
-<main>
-<section id="inicio" className="hero"><div><span className="eyebrow">PLATAFORMA DIGITAL WCD</span><h1>Encuentra productos y prepara tu pedido fácilmente.</h1><p>Busca por nombre, marca, ITEM # o descripción.</p><a className="primary" href="#productos">Explorar productos</a></div>
-<div className="heroCard"><Package size={52}/><strong>WCD Marketplace 2.0</strong><span>GitHub + Cloudflare listos</span></div></section>
-
-<section className="section"><span className="eyebrow"><Flame size={16}/> PROMOCIONES</span><h2>Promociones destacadas</h2>
-<div className="grid">{products.map(p=><ProductCard key={p.id} p={p}/>)}</div></section>
-
-<section id="productos" className="section"><span className="eyebrow">CATÁLOGO</span><h2>Todos los productos</h2>
-<label className="search"><Search size={20}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar producto, marca o ITEM #..."/></label>
-<div className="grid">{filtered.map(p=><ProductCard key={p.id} p={p}/>)}</div></section>
-
-<section id="pdf" className="pdf"><FileText size={40}/><div><h2>Catálogo PDF</h2><p>Se conectará desde Supabase Storage en la siguiente etapa.</p></div></section>
-</main><footer>© 2026 World Connect Distribution · WCD Marketplace</footer>
-</div>}
+{id:'000190',brand:'DEL FRUTAL',name:'Del Frutal Orange PET 500 ml',code:'Del Frutal Orange PET 500ml',desc:'Bebida de naranja PET 500 ml (12)',price:24,promo:null,promoText:'Compra 5 cajas y recibe 1 caja gratis',cat:'Bebidas'},
+{id:'000229',brand:'DE MI PAÍS',name:'Leche de Coco Guanábana',code:'DMP Leche de Coco Guanábana',desc:'Bebida de leche de coco 16.4 oz (12)',price:29.5,promo:25,promoText:'Precio especial por tiempo limitado',cat:'Bebidas'},
+{id:'000713',brand:'RAPTOR',name:'Raptor Lava 473 ml',code:'Raptor Lata Lava 473 ml',desc:'Energy drink Watermelon 24/473 ml',price:60.14,promo:null,promoText:'Compra 4 cajas y recibe 1 gratis',cat:'Bebidas'},
+{id:'000714',brand:'RAPTOR',name:'Raptor Thunder 473 ml',code:'Raptor Lata Thunder 473 ml',desc:'Energy drink Mango & Pineapple 24/473 ml',price:60.14,promo:null,promoText:'Compra 4 cajas y recibe 1 gratis',cat:'Bebidas'},
+{id:'000445',brand:'KERNS',name:'Kerns Néctar de Pera 330 ml',code:'Kerns Nectar Pera 330 ml',desc:'Néctar de pera en lata 24/330 ml',price:31.8,promo:28.8,promoText:'$3.00 OFF por caja',cat:'Bebidas'},
+{id:'000400',brand:'INA',name:'Pasta Ina Caracolito',code:'Pasta Ina Caracolito',desc:'Pasta caracolito 16 oz',price:22.75,promo:null,promoText:null,cat:'Alimentos'}];
+const cats=['Todos','Bebidas','Snacks','Alimentos','Limpieza'];
+function Card({p,onAdd}){const[q,setQ]=useState(1);return <article className="card"><div className="media">{p.promoText&&<span className="badge">PROMOCIÓN</span>}<div className="ph"><Package size={58}/><span>Imagen desde Supabase</span></div></div><div className="body"><span className="brandName">{p.brand}</span><h3>{p.name}</h3><div className="meta">ITEM # {p.id}<br/>{p.code}</div><p>{p.desc}</p>{p.promoText&&<div className="promoText">{p.promoText}</div>}<div className="prices"><div><small>Precio regular</small><strong>${p.price.toFixed(2)}</strong></div>{p.promo&&<div className="promoPrice"><small>Precio promoción</small><strong>${p.promo.toFixed(2)}</strong></div>}</div><div className="actions"><div className="qty"><button onClick={()=>setQ(Math.max(1,q-1))}><Minus size={16}/></button><span>{q}</span><button onClick={()=>setQ(q+1)}><Plus size={16}/></button></div><button className="add" onClick={()=>onAdd(p,q)}><ShoppingCart size={16}/>Agregar</button></div></div></article>}
+function App(){const[query,setQuery]=useState('');const[cat,setCat]=useState('Todos');const[cart,setCart]=useState([]);const[open,setOpen]=useState(false);const filtered=useMemo(()=>products.filter(p=>(cat==='Todos'||p.cat===cat)&&`${p.brand} ${p.name} ${p.id} ${p.code} ${p.desc}`.toLowerCase().includes(query.toLowerCase())),[query,cat]);const add=(p,q)=>{setCart(c=>{const e=c.find(i=>i.id===p.id);return e?c.map(i=>i.id===p.id?{...i,qty:i.qty+q}:i):[...c,{...p,qty:q}]});setOpen(true)};const count=cart.reduce((s,i)=>s+i.qty,0);return <><header><a className="brand" href="#inicio"><img src="/wcd-logo.png"/><div><strong>WCD Marketplace</strong><span>Productos que te conectan con tu tierra</span></div></a><nav><a href="#inicio">Inicio</a><a href="#promos">Promociones</a><a href="#productos">Productos</a><a href="#pdf">Catálogo PDF</a></nav><button className="cartBtn" onClick={()=>setOpen(true)}><ShoppingCart size={18}/>Mi pedido{count>0&&<b>{count}</b>}</button></header><main><section id="inicio" className="hero"><div><span className="eyebrow">WCD MARKETPLACE</span><h1>Encuentra productos y prepara tu pedido en minutos.</h1><p>Consulta precios, promociones y presentaciones desde cualquier dispositivo.</p><div className="heroBtns"><a href="#productos" className="primary">Explorar productos</a><a href="#promos" className="secondary">Ver promociones</a></div></div><div className="heroCard"><img src="/wcd-logo.png"/><span>Catálogo digital y pedidos</span></div></section><section className="searchBar"><Search size={20}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar por producto, marca, ITEM # o descripción..."/><a href="#productos">Buscar</a></section><section id="promos" className="section"><span className="label"><Flame size={16}/>OFERTAS ACTIVAS</span><h2>Promociones destacadas</h2><p className="sub">Productos recomendados para vender hoy.</p><div className="grid">{products.filter(p=>p.promoText).slice(0,3).map(p=><Card key={p.id} p={p} onAdd={add}/>)}</div></section><section id="productos" className="section"><div className="sectionTop"><div><span className="label">CATÁLOGO WCD</span><h2>Todos los productos</h2><p className="sub">{filtered.length} productos visibles en esta demostración.</p></div><label className="smallSearch"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar productos..."/></label></div><div className="tabs">{cats.map(c=><button className={cat===c?'active':''} onClick={()=>setCat(c)} key={c}>{c}</button>)}</div><div className="grid">{filtered.map(p=><Card key={p.id} p={p} onAdd={add}/>)}</div></section><section id="pdf" className="pdf"><FileText size={42}/><div><span className="label">CATÁLOGO COMPLETO</span><h2>Consulta el catálogo PDF de WCD</h2><p className="sub">Se conectará al PDF vigente en Supabase.</p></div><button disabled>Próximamente</button></section></main><footer><img src="/wcd-logo.png"/><div><strong>World Connect Distribution</strong><span>Productos que te conectan con tu tierra</span></div><p>© 2026 WCD Marketplace</p></footer><div className={open?'overlay show':'overlay'} onClick={()=>setOpen(false)}/><aside className={open?'drawer open':'drawer'}><div className="drawerHead"><div><span>MI PEDIDO</span><h2>{count} cajas seleccionadas</h2></div><button onClick={()=>setOpen(false)}><X/></button></div><div className="drawerBody">{cart.length===0?<div className="empty"><ShoppingCart size={48}/><h3>Tu pedido está vacío</h3></div>:cart.map(i=><div className="item" key={i.id}><div><strong>{i.name}</strong><span>ITEM # {i.id}</span></div><b>{i.qty} cajas</b></div>)}</div><div className="drawerFoot"><button disabled={cart.length===0}>Continuar pedido</button><small>En la siguiente etapa agregaremos datos del cliente y WhatsApp.</small></div></aside></>}
 createRoot(document.getElementById('root')).render(<App/>);
