@@ -15,7 +15,8 @@ import {
   ArrowLeft,
   LayoutDashboard, Boxes, UploadCloud, Images, Tags, BadgePercent,
   SlidersHorizontal, Users, ShieldCheck, Settings, DatabaseBackup, Menu,
-  ChevronRight, CheckCircle2, AlertTriangle, Clock3, LogOut,
+  ChevronRight, CheckCircle2, AlertTriangle, Clock3, LogOut, Eye, ArrowUpDown,
+  Sparkles, Grid3X3, Save, CalendarDays, Link2,
 } from 'lucide-react';
 import { supabase } from './supabase';
 import './styles.css';
@@ -38,6 +39,7 @@ function formatProduct(row) {
     promoText: row.promo_active ? row.promo_text : null,
     cat: row.section || row.category || 'Otros',
     image: row.image_url || null,
+    createdAt: row.created_at || null,
   };
 }
 
@@ -136,6 +138,96 @@ function Card({ p, onAdd }) {
 
 const SELLERS = ['Mara', 'Tulio', 'Viviana', 'Martin', 'Hortencia', 'Janeth'];
 
+const WCD_SECTION_COLORS = ['#ff9500', '#0268df', '#35cf00', '#b11eb8', '#db0087'];
+const DEFAULT_HERO_SETTINGS = {
+  eyebrow: 'WCD MARKETPLACE',
+  title: 'Encuentra productos y prepara tu pedido en minutos.',
+  description: 'Consulta precios, promociones y presentaciones desde cualquier dispositivo.',
+  primaryText: 'Explorar productos',
+  secondaryText: 'Ver promociones',
+  primaryUrl: '#productos',
+  secondaryUrl: '#promociones',
+  cardText: 'Catálogo digital y pedidos',
+  cardImage: '/wcd-logo.png',
+};
+
+const DEFAULT_NEW_PRODUCTS_SETTINGS = {
+  enabled: true,
+  title: 'Productos nuevos',
+  limit: 12,
+  selectedCodes: [],
+};
+
+const DEFAULT_FEATURED_PROMOTIONS_SETTINGS = {
+  enabled: true,
+  title: 'Promociones destacadas',
+  limit: 3,
+  selectedCodes: [],
+};
+
+const DEFAULT_HOME_PROMOTIONS = [
+  { id: 1, active: true, title: 'Promociones WCD', description: 'Descubre ofertas especiales seleccionadas para tu negocio.', buttonText: 'Ver promociones', buttonUrl: '#promociones', imageUrl: '/wcd-logo.png', color: '#0268df', startDate: '', endDate: '' },
+  { id: 2, active: true, title: 'Productos centroamericanos', description: 'Encuentra marcas y sabores que conectan con nuestra tierra.', buttonText: 'Comprar ahora', buttonUrl: '#productos', imageUrl: '/wcd-logo.png', color: '#ff9500', startDate: '', endDate: '' },
+  { id: 3, active: true, title: 'Catálogo para tu tienda', description: 'Prepara tu pedido de manera rápida y sencilla.', buttonText: 'Explorar catálogo', buttonUrl: '#productos', imageUrl: '/wcd-logo.png', color: '#db0087', startDate: '', endDate: '' },
+];
+
+function readLocalSettings(key, defaults) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || 'null');
+    return saved ? { ...defaults, ...saved } : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function getSavedNewProductsSettings() {
+  return readLocalSettings('wcd_new_products_settings', DEFAULT_NEW_PRODUCTS_SETTINGS);
+}
+
+function getSavedFeaturedPromotionsSettings() {
+  return readLocalSettings(
+    'wcd_featured_promotions_settings',
+    DEFAULT_FEATURED_PROMOTIONS_SETTINGS
+  );
+}
+
+function getSavedHomePromotions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('wcd_home_promotions') || 'null');
+    return Array.isArray(saved) && saved.length ? saved : DEFAULT_HOME_PROMOTIONS;
+  } catch {
+    return DEFAULT_HOME_PROMOTIONS;
+  }
+}
+
+const CATEGORY_ICONS = {
+  Package,
+  ShoppingCart,
+  Tags,
+  Boxes,
+  FileText,
+  BadgePercent,
+  Sparkles,
+  Grid3X3,
+};
+const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS);
+
+function getSavedCategorySettings() {
+  try {
+    return JSON.parse(localStorage.getItem('wcd_category_settings') || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function getSavedHeroSettings() {
+  try {
+    return { ...DEFAULT_HERO_SETTINGS, ...JSON.parse(localStorage.getItem('wcd_hero_settings') || '{}') };
+  } catch {
+    return DEFAULT_HERO_SETTINGS;
+  }
+}
+
 function App() {
   const [products, setProducts] = useState([]);
   const [query, setQuery] = useState('');
@@ -153,6 +245,16 @@ function App() {
   const [phone, setPhone] = useState('');
   const [sellerName, setSellerName] = useState('');
   const [notes, setNotes] = useState('');
+  const [heroSettings, setHeroSettings] = useState(getSavedHeroSettings);
+  const [newProductsSettings] = useState(getSavedNewProductsSettings);
+  const [homePromotions] = useState(getSavedHomePromotions);
+  const [featuredPromotionsSettings] = useState(getSavedFeaturedPromotionsSettings);
+  const [categorySettings] = useState(getSavedCategorySettings);
+  const [currentView, setCurrentView] = useState(() => {
+    if (window.location.hash === '#promociones') return 'promotions';
+    if (window.location.hash === '#productos') return 'products';
+    return 'home';
+  });
 
   const wcdWhatsAppNumber =
     import.meta.env.VITE_WCD_WHATSAPP_NUMBER || '';
@@ -186,48 +288,153 @@ function App() {
     loadProducts();
   }, []);
 
-  const cats = useMemo(() => {
-    const productCategories = products
-      .map((product) => product.cat)
-      .filter(Boolean);
+const cats = useMemo(() => {
+  const productCategories = products
+    .map((product) => product.cat)
+    .filter(Boolean);
 
-    return ['Todos', ...new Set(productCategories)];
-  }, [products]);
+  const sortedCategories = [...new Set(productCategories)]
+    .sort((a, b) =>
+      String(a).localeCompare(String(b), 'es', {
+        sensitivity: 'base',
+      })
+    );
 
-  const filtered = useMemo(() => {
-    const text = query.toLowerCase().trim();
+  return ['Todos', ...sortedCategories];
+}, [products]);
 
-    return products.filter((product) => {
+const filtered = useMemo(() => {
+  const text = query.toLowerCase().trim();
+
+  return products
+    .filter((product) => {
       const matchesCategory =
         cat === 'Todos' || product.cat === cat;
 
       const searchable = `
-        ${product.brand}
-        ${product.name}
-        ${product.id}
-        ${product.code}
-        ${product.desc}
+        ${product.brand || ''}
+        ${product.name || ''}
+        ${product.id || ''}
+        ${product.code || ''}
+        ${product.desc || ''}
       `.toLowerCase();
 
       return (
         matchesCategory &&
         searchable.includes(text)
       );
-    });
-  }, [products, query, cat]);
+    })
+    .sort((a, b) =>
+      String(a.name || a.desc || '').localeCompare(
+        String(b.name || b.desc || ''),
+        'es',
+        {
+          sensitivity: 'base',
+        }
+      )
+    );
+}, [products, query, cat]);
 
-  const displayedProducts = filtered.slice(
-    0,
-    visibleProducts
+const displayedProducts = filtered.slice(
+  0,
+  visibleProducts
+);
+
+useEffect(() => {
+  setVisibleProducts(24);
+}, [query, cat]);
+
+const promotions = products
+  .filter((product) => product.promoText)
+  .sort((a, b) =>
+    String(a.name || a.desc || '').localeCompare(
+      String(b.name || b.desc || ''),
+      'es',
+      {
+        sensitivity: 'base',
+      }
+    )
   );
 
-  useEffect(() => {
-    setVisibleProducts(24);
-  }, [query, cat]);
 
-  const promotions = products.filter(
-    (product) => product.promoText
+  const newProducts = useMemo(() => {
+    const selected = (newProductsSettings.selectedCodes || []).map((code) => String(code).trim()).filter(Boolean);
+    if (selected.length) {
+      const orderMap = new Map(selected.map((code, index) => [code.toLowerCase(), index]));
+      return products
+        .filter((product) => [product.id, product.code].some((value) => orderMap.has(String(value || '').toLowerCase())))
+        .sort((a, b) => {
+          const aIndex = Math.min(...[a.id, a.code].map((value) => orderMap.get(String(value || '').toLowerCase()) ?? 9999));
+          const bIndex = Math.min(...[b.id, b.code].map((value) => orderMap.get(String(value || '').toLowerCase()) ?? 9999));
+          return aIndex - bIndex;
+        })
+        .slice(0, Math.max(1, Number(newProductsSettings.limit) || 12));
+    }
+    return [];
+  }, [products, newProductsSettings]);
+
+  const featuredPromotions = useMemo(() => {
+  const selected = (featuredPromotionsSettings.selectedCodes || [])
+    .map((code) => String(code).trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!selected.length) {
+    return [];
+  }
+
+  const orderMap = new Map(
+    selected.map((code, index) => [code, index])
   );
+
+  return promotions
+    .filter((product) =>
+      [product.id, product.code].some((value) =>
+        orderMap.has(String(value || '').toLowerCase())
+      )
+    )
+    .sort((a, b) => {
+      const aIndex = Math.min(
+        ...[a.id, a.code].map(
+          (value) =>
+            orderMap.get(String(value || '').toLowerCase()) ?? 9999
+        )
+      );
+
+      const bIndex = Math.min(
+        ...[b.id, b.code].map(
+          (value) =>
+            orderMap.get(String(value || '').toLowerCase()) ?? 9999
+        )
+      );
+
+      return aIndex - bIndex;
+    })
+    .slice(
+      0,
+      Math.max(
+        1,
+        Number(featuredPromotionsSettings.limit) || 3
+      )
+    );
+  }, [promotions, featuredPromotionsSettings]);
+
+  const activeHomePromotions = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return homePromotions.filter((promo) => promo.active !== false && (!promo.startDate || promo.startDate <= today) && (!promo.endDate || promo.endDate >= today)).slice(0, 3);
+  }, [homePromotions]);
+
+  function navigateTo(view, category = 'Todos') {
+    setCurrentView(view);
+    if (view === 'products') {
+      setCat(category);
+      window.location.hash = 'productos';
+    } else if (view === 'promotions') {
+      window.location.hash = 'promociones';
+    } else {
+      window.location.hash = 'inicio';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   function add(product, quantity) {
     setCart((currentCart) => {
@@ -367,7 +574,7 @@ function App() {
   return (
     <>
       <header>
-        <a className="brand" href="#inicio">
+        <a className="brand" href="#inicio" onClick={(event) => { event.preventDefault(); navigateTo('home'); }}>
           <img src="/wcd-logo.png" alt="WCD" />
 
           <div>
@@ -379,9 +586,9 @@ function App() {
         </a>
 
         <nav>
-          <a href="#inicio">Inicio</a>
-          <a href="#promos">Promociones</a>
-          <a href="#productos">Productos</a>
+          <a href="#inicio" onClick={(event) => { event.preventDefault(); navigateTo('home'); }}>Inicio</a>
+          <a href="#promociones" onClick={(event) => { event.preventDefault(); navigateTo('promotions'); }}>Promociones</a>
+          <a href="#productos" onClick={(event) => { event.preventDefault(); navigateTo('products'); }}>Productos</a>
           
           <a
             href={catalogPdfUrl || '#pdf'}
@@ -403,36 +610,32 @@ function App() {
       </header>
 
       <main>
+        {currentView === 'home' && (
+          <>
         <section id="inicio" className="hero">
           <div>
             <span className="eyebrow">
-              WCD MARKETPLACE
+              {heroSettings.eyebrow}
             </span>
 
-            <h1>
-              Encuentra productos y prepara tu pedido
-              en minutos.
-            </h1>
+            <h1>{heroSettings.title}</h1>
 
-            <p>
-              Consulta precios, promociones y
-              presentaciones desde cualquier dispositivo.
-            </p>
+            <p>{heroSettings.description}</p>
 
             <div className="heroBtns">
-              <a href="#productos" className="primary">
-                Explorar productos
+              <a href="#productos" className="primary" onClick={(event) => { event.preventDefault(); navigateTo('products'); }}>
+                {heroSettings.primaryText}
               </a>
 
-              <a href="#promos" className="secondary">
-                Ver promociones
+              <a href="#promociones" className="secondary" onClick={(event) => { event.preventDefault(); navigateTo('promotions'); }}>
+                {heroSettings.secondaryText}
               </a>
             </div>
           </div>
 
           <div className="heroCard">
-            <img src="/wcd-logo.png" alt="WCD" />
-            <span>Catálogo digital y pedidos</span>
+            <img src={heroSettings.cardImage || '/wcd-logo.png'} alt="WCD" onError={(event) => { event.currentTarget.src = '/wcd-logo.png'; }} />
+            <span>{heroSettings.cardText}</span>
           </div>
         </section>
 
@@ -447,8 +650,10 @@ function App() {
             placeholder="Buscar por producto, marca, ITEM # o descripción..."
           />
 
-          <a href="#productos">Buscar</a>
+          <a href="#productos" onClick={(event) => { event.preventDefault(); navigateTo('products'); }}>Buscar</a>
         </section>
+          </>
+)}
 
         {databaseError && (
           <section className="section">
@@ -468,182 +673,81 @@ function App() {
           </section>
         )}
 
-        <section id="promos" className="section">
-          <span className="label">
-            <Flame size={16} />
-            OFERTAS ACTIVAS
-          </span>
-
-          <h2>Promociones destacadas</h2>
-
-          <p className="sub">
-            Productos recomendados para vender hoy.
-          </p>
-
-          {loading ? (
-            <p>Cargando promociones...</p>
-          ) : promotions.length > 0 ? (
-            <div className="grid">
-              {promotions.slice(0, 3).map((product) => (
-                <Card
-                  key={product.id}
-                  p={product}
-                  onAdd={add}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="sub">
-              No hay promociones activas actualmente.
-            </p>
-          )}
-        </section>
-
-        <section id="productos" className="section">
-          <div className="sectionTop">
-            <div>
-              <span className="label">
-                CATÁLOGO WCD
-              </span>
-
-              <h2>Todos los productos</h2>
-
-              <p className="sub">
-                {loading
-                  ? 'Cargando productos...'
-                  : `${filtered.length} productos encontrados.`}
-              </p>
-            </div>
-
-            <label className="smallSearch">
-              <Search size={18} />
-
-              <input
-                value={query}
-                onChange={(event) =>
-                  setQuery(event.target.value)
-                }
-                placeholder="Buscar productos..."
-              />
-            </label>
-          </div>
-
-          <div className="tabs">
-            {cats.map((category) => (
-              <button
-                className={
-                  cat === category ? 'active' : ''
-                }
-                onClick={() => setCat(category)}
-                key={category}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-
-          {!loading && filtered.length > 0 && (
-            <>
-              <div className="grid">
-                {displayedProducts.map((product) => (
-                  <Card
-                    key={product.id}
-                    p={product}
-                    onAdd={add}
-                  />
-                ))}
-              </div>
-
-              {displayedProducts.length < filtered.length && (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    paddingTop: '30px',
-                  }}
-                >
-                  <button
-                    className="primary"
-                    onClick={() =>
-                      setVisibleProducts(
-                        (current) => current + 24
-                      )
-                    }
-                    style={{
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '14px 28px',
-                      borderRadius: '12px',
-                      fontWeight: '700',
-                    }}
-                  >
-                    Ver más productos
-                  </button>
+        {currentView === 'home' && (
+          <>
+            {newProductsSettings.enabled && (
+              <section id="productos-nuevos" className="section homeNewProducts">
+                <span className="label"><Sparkles size={16} /> SELECCIÓN NUEVA</span>
+                <div className="sectionTop">
+                  <div>
+                    <h2>{newProductsSettings.title || 'Productos nuevos'}</h2>
+                    <p className="sub">Productos elegidos desde el Panel Administrativo.</p>
+                  </div>
+                  <button className="sectionLink linkButton" onClick={() => navigateTo('products')}>Ver todos</button>
                 </div>
-              )}
-            </>
-          )}
-
-          {!loading &&
-            !databaseError &&
-            filtered.length === 0 && (
-              <div
-                style={{
-                  padding: '45px',
-                  textAlign: 'center',
-                  background: 'white',
-                  borderRadius: '18px',
-                }}
-              >
-                <Package size={45} />
-
-                <h3>No hay productos para mostrar</h3>
-
-                <p>
-                  La tabla de Supabase todavía está vacía
-                  o no coincide con la búsqueda.
-                </p>
-              </div>
+                {loading ? <p>Cargando productos nuevos...</p> : newProducts.length ? (
+                  <div className="grid">
+                    {newProducts.map((product) => <Card key={`new-${product.id}`} p={product} onAdd={add} />)}
+                  </div>
+                ) : (
+                  <p className="sub">Selecciona los productos nuevos desde el Panel Administrativo usando su código o ITEM #.</p>
+                )}
+              </section>
             )}
-        </section>
 
-        <section id="pdf" className="pdf">
-          <FileText size={42} />
+            <section id="promos-destacadas" className="section">
+              <span className="label"><Flame size={16} /> OFERTAS ACTIVAS</span>
+              <div className="sectionTop">
+                <div><h2>Promociones destacadas</h2><p className="sub">Una selección de ofertas vigentes para tu negocio.</p></div>
+                <button className="sectionLink linkButton" onClick={() => navigateTo('promotions')}>Ver todas</button>
+              </div>
+              {loading ? (<p>Cargando promociones...</p>) : featuredPromotions.length > 0 ? (
+                <div className="grid">{featuredPromotions.map((product) => (<Card key={product.id} p={product}onAdd={add} />))}</div>
+                ) : (<p className="sub">No hay promociones destacadas seleccionadas.</p>)}
+            </section>
 
-          <div>
-            <span className="label">
-              CATÁLOGO COMPLETO
-            </span>
+            <section id="secciones" className="section categoryShowcase">
+              <span className="label"><Grid3X3 size={16} /> SECCIONES DEL CATÁLOGO</span>
+              <h2>Compra por categoría</h2>
+              <p className="sub">Selecciona una categoría para ver únicamente sus productos.</p>
+              <div className="categoryIconGrid">
+                {cats.filter((category) => category !== 'Todos').map((category, index) => {
+                  const setting = categorySettings[category] || {};
+                  const Icon = CATEGORY_ICONS[setting.icon] || CATEGORY_ICONS[CATEGORY_ICON_NAMES[index % CATEGORY_ICON_NAMES.length]];
+                  const color = setting.color || WCD_SECTION_COLORS[index % WCD_SECTION_COLORS.length];
+                  return <button key={`category-${category}`} onClick={() => navigateTo('products', category)} style={{ '--category-color': color }}><span><Icon size={30} /></span><strong>{category}</strong><small>Ver productos</small></button>;
+                })}
+              </div>
+            </section>
+          </>
+        )}
 
-            <h2>Consulta el catálogo PDF de WCD</h2>
+        {currentView === 'promotions' && (
+          <section id="promociones" className="section allPromotionsSection standaloneView">
+            <button className="backHomeButton" onClick={() => navigateTo('home')}><ArrowLeft size={18} /> Volver al inicio</button>
+            <span className="label"><BadgePercent size={16} /> TODAS LAS PROMOCIONES</span>
+            <h2>Promociones disponibles</h2>
+            <p className="sub">Consulta todas las ofertas activas del Marketplace.</p>
+            {loading ? <p>Cargando promociones...</p> : promotions.length > 0 ? (
+              <div className="grid">{promotions.map((product) => <Card key={`promo-${product.id}`} p={product} onAdd={add} />)}</div>
+            ) : <p className="sub">No hay promociones activas actualmente.</p>}
+          </section>
+        )}
 
-            <p className="sub">
-              Se conectará al PDF vigente en Supabase.
-            </p>
-          </div>
-
-          {catalogPdfUrl ? (
-            <a
-              href={catalogPdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="primary"
-              style={{
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '13px 18px',
-                borderRadius: '11px',
-                fontWeight: '800',
-              }}
-            >
-              Abrir catálogo PDF
-            </a>
-          ) : (
-            <button disabled>PDF no disponible</button>
-          )}
-        </section>
+        {currentView === 'products' && (
+          <section id="productos" className="section standaloneView">
+            <button className="backHomeButton" onClick={() => navigateTo('home')}><ArrowLeft size={18} /> Volver al inicio</button>
+            <div className="sectionTop">
+              <div><span className="label">CATÁLOGO WCD</span><h2>{cat === 'Todos' ? 'Todos los productos' : cat}</h2><p className="sub">{loading ? 'Cargando productos...' : `${filtered.length} productos encontrados.`}</p></div>
+              <label className="smallSearch"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar productos..." /></label>
+            </div>
+            <div className="tabs">
+              {cats.map((category, index) => <button className={cat === category ? 'active' : ''} onClick={() => setCat(category)} key={category} style={{ '--category-color': (categorySettings[category]?.color || WCD_SECTION_COLORS[index % WCD_SECTION_COLORS.length]), '--category-text': '#ffffff' }}>{category}</button>)}
+            </div>
+            {!loading && filtered.length > 0 && <><div className="grid">{displayedProducts.map((product) => <Card key={product.id} p={product} onAdd={add} />)}</div>{displayedProducts.length < filtered.length && <div className="loadMoreWrap"><button className="primary loadMoreButton" onClick={() => setVisibleProducts((current) => current + 24)}>Ver más productos</button></div>}</>}
+            {!loading && filtered.length === 0 && <div className="empty"><Package size={52} /><h3>No encontramos productos</h3><p>Prueba con otra categoría o búsqueda.</p></div>}
+          </section>
+        )}
       </main>
 
       <footer>
@@ -760,6 +864,10 @@ function App() {
 
 const ADMIN_NAV = [
   { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'Portada', icon: Images },
+  { label: 'Productos nuevos', icon: Sparkles },
+  { label: 'Promociones destacadas', icon: BadgePercent },
+  { label: 'Secciones', icon: Grid3X3 },
   { label: 'Productos', icon: Boxes },
   { label: 'Importar Excel', icon: UploadCloud },
   { label: 'Imágenes de productos', icon: Images },
@@ -783,6 +891,9 @@ function AdminProducts() {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [brokenImages, setBrokenImages] = useState(() => new Set());
   const [page, setPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState({ key: 'item_number', direction: 'asc' });
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [copyMessage, setCopyMessage] = useState('');
   const pageSize = 25;
 
   useEffect(() => {
@@ -811,7 +922,7 @@ function AdminProducts() {
 
   const filteredRows = useMemo(() => {
     const needle = searchText.trim().toLowerCase();
-    return rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       const brand = row.brand || '';
       const category = row.section || row.category || '';
       const active = row.active !== false;
@@ -822,7 +933,24 @@ function AdminProducts() {
         (categoryFilter === 'Todas' || category === categoryFilter) &&
         matchesStatus;
     });
-  }, [rows, searchText, brandFilter, categoryFilter, statusFilter]);
+
+    const getValue = (row) => {
+      if (sortConfig.key === 'product') return row.item_code || row.description || '';
+      if (sortConfig.key === 'category') return row.section || row.category || '';
+      if (sortConfig.key === 'status') return row.active !== false ? 1 : 0;
+      if (sortConfig.key === 'price') return Number(row.price || 0);
+      return row[sortConfig.key] || '';
+    };
+
+    return [...filtered].sort((a, b) => {
+      const left = getValue(a);
+      const right = getValue(b);
+      const comparison = typeof left === 'number' && typeof right === 'number'
+        ? left - right
+        : String(left).localeCompare(String(right), 'es', { numeric: true, sensitivity: 'base' });
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [rows, searchText, brandFilter, categoryFilter, statusFilter, sortConfig]);
 
   useEffect(() => setPage(1), [searchText, brandFilter, categoryFilter, statusFilter]);
 
@@ -837,6 +965,16 @@ function AdminProducts() {
     setStatusFilter('Todos');
   };
   const activeProducts = rows.filter((row) => row.active !== false).length;
+  const toggleSort = (key) => setSortConfig((current) => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' }));
+  const copyItemNumber = async (itemNumber) => {
+    try {
+      await navigator.clipboard.writeText(itemNumber);
+      setCopyMessage(`Artículo ${itemNumber} copiado`);
+      window.setTimeout(() => setCopyMessage(''), 1800);
+    } catch {
+      setCopyMessage('No se pudo copiar');
+    }
+  };
 
   return (
     <div className="adminContent">
@@ -868,7 +1006,7 @@ function AdminProducts() {
           <>
             <div className="adminTableWrap">
               <table className="adminProductsTable">
-                <thead><tr><th>Imagen</th><th>Artículo</th><th>Producto</th><th>Marca</th><th>Categoría</th><th>Precio actual</th><th>Promoción</th><th>Estado</th></tr></thead>
+                <thead><tr><th>Imagen</th><th><button className="sortButton" onClick={() => toggleSort('item_number')}>Artículo <ArrowUpDown size={13} /></button></th><th><button className="sortButton" onClick={() => toggleSort('product')}>Producto <ArrowUpDown size={13} /></button></th><th><button className="sortButton" onClick={() => toggleSort('brand')}>Marca <ArrowUpDown size={13} /></button></th><th><button className="sortButton" onClick={() => toggleSort('category')}>Categoría <ArrowUpDown size={13} /></button></th><th><button className="sortButton" onClick={() => toggleSort('price')}>Precio actual <ArrowUpDown size={13} /></button></th><th>Promoción</th><th><button className="sortButton" onClick={() => toggleSort('status')}>Estado <ArrowUpDown size={13} /></button></th><th>Acciones</th></tr></thead>
                 <tbody>
                   {visibleRows.map((row) => {
                     const active = row.active !== false;
@@ -882,6 +1020,7 @@ function AdminProducts() {
                       <td><strong>${Number(row.price || 0).toFixed(2)}</strong></td>
                       <td>{row.promo_active ? <span className="promoPill">Activa</span> : <span className="mutedText">No</span>}</td>
                       <td><span className={active ? 'statusPill active' : 'statusPill inactive'}>{active ? 'Activo' : 'Inactivo'}</span></td>
+                      <td><div className="rowActions"><button type="button" title="Ver detalles" onClick={() => setSelectedProduct(row)}><Eye size={16} /></button><button type="button" title="Copiar artículo" onClick={() => copyItemNumber(row.item_number)}><Copy size={16} /></button></div></td>
                     </tr>;
                   })}
                 </tbody>
@@ -892,8 +1031,418 @@ function AdminProducts() {
           </>
         )}
       </section>
+      {copyMessage && <div className="adminToast">{copyMessage}</div>}
+      {selectedProduct && (
+        <div className="productModalOverlay" onClick={() => setSelectedProduct(null)}>
+          <section className="productModal" onClick={(event) => event.stopPropagation()}>
+            <button className="productModalClose" onClick={() => setSelectedProduct(null)}><X size={20} /></button>
+            <div className="productModalMedia">
+              {selectedProduct.image_url && !brokenImages.has(selectedProduct.id || selectedProduct.item_number)
+                ? <img src={selectedProduct.image_url} alt={selectedProduct.item_code || selectedProduct.description || selectedProduct.item_number} />
+                : <div className="productModalPlaceholder"><Package size={48} /><span>Imagen no disponible</span></div>}
+            </div>
+            <div className="productModalBody">
+              <span className="adminEyebrow">DETALLE DEL PRODUCTO</span>
+              <h2>{selectedProduct.item_code || selectedProduct.description || 'Sin nombre'}</h2>
+              <p>{selectedProduct.description || 'Sin descripción'}</p>
+              <div className="productDetailGrid">
+                <div><span>Artículo</span><strong>{selectedProduct.item_number}</strong></div>
+                <div><span>Marca</span><strong>{selectedProduct.brand || 'SIN MARCA'}</strong></div>
+                <div><span>Categoría</span><strong>{selectedProduct.section || selectedProduct.category || 'Sin categoría'}</strong></div>
+                <div><span>Precio actual</span><strong>${Number(selectedProduct.price || 0).toFixed(2)}</strong></div>
+                <div><span>Promoción</span><strong>{selectedProduct.promo_active ? 'Activa' : 'No'}</strong></div>
+                <div><span>Estado</span><strong>{selectedProduct.active !== false ? 'Activo' : 'Inactivo'}</strong></div>
+              </div>
+              <div className="productModalActions"><button onClick={() => copyItemNumber(selectedProduct.item_number)}><Copy size={17} /> Copiar artículo</button><button className="secondaryModalButton" disabled title="Se habilitará con los permisos administrativos">Editar próximamente</button></div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
+}
+
+function AdminHeroSettings() {
+  const [draft, setDraft] = useState(getSavedHeroSettings);
+  const [savedMessage, setSavedMessage] = useState('');
+
+  function updateField(field, value) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function savePreview() {
+    localStorage.setItem('wcd_hero_settings', JSON.stringify(draft));
+    setSavedMessage('Portada guardada en este navegador.');
+    setTimeout(() => setSavedMessage(''), 2500);
+  }
+
+  function restoreDefaults() {
+    setDraft(DEFAULT_HERO_SETTINGS);
+    localStorage.setItem('wcd_hero_settings', JSON.stringify(DEFAULT_HERO_SETTINGS));
+    setSavedMessage('Portada restaurada.');
+    setTimeout(() => setSavedMessage(''), 2500);
+  }
+
+  return <div className="adminContent">
+    <section className="adminPanelCard coverSettings">
+      <div className="adminPanelHead"><div><span>CONFIGURACIÓN VISUAL</span><h3>Portada del Marketplace</h3></div><Images size={25} /></div>
+      <p className="adminModuleIntro">Modifica textos y la imagen de la tarjeta principal. Los cambios se reflejan en esta versión de prueba. En la etapa de publicación final se conectarán a Supabase para que sean globales.</p>
+      <div className="coverEditorGrid">
+        <div className="coverForm">
+          <label><span>Etiqueta superior</span><input value={draft.eyebrow} onChange={(e) => updateField('eyebrow', e.target.value)} /></label>
+          <label><span>Título principal</span><textarea rows="3" value={draft.title} onChange={(e) => updateField('title', e.target.value)} /></label>
+          <label><span>Descripción</span><textarea rows="3" value={draft.description} onChange={(e) => updateField('description', e.target.value)} /></label>
+          <div className="coverTwoFields">
+            <label><span>Botón principal</span><input value={draft.primaryText} onChange={(e) => updateField('primaryText', e.target.value)} /></label>
+            <label><span>Enlace principal</span><input value={draft.primaryUrl || '#productos'} onChange={(e) => updateField('primaryUrl', e.target.value)} /></label>
+            <label><span>Botón secundario</span><input value={draft.secondaryText} onChange={(e) => updateField('secondaryText', e.target.value)} /></label>
+            <label><span>Enlace secundario</span><input value={draft.secondaryUrl || '#promociones'} onChange={(e) => updateField('secondaryUrl', e.target.value)} /></label>
+          </div>
+          <label><span>Texto de la tarjeta</span><input value={draft.cardText} onChange={(e) => updateField('cardText', e.target.value)} /></label>
+          <label><span>URL de imagen o logo</span><input value={draft.cardImage} onChange={(e) => updateField('cardImage', e.target.value)} placeholder="/wcd-logo.png o URL pública" /></label>
+          <div className="coverActions"><button className="adminPrimaryAction" onClick={savePreview}>Guardar vista previa</button><button className="coverReset" onClick={restoreDefaults}>Restaurar original</button></div>
+          {savedMessage && <div className="coverSaved">{savedMessage}</div>}
+        </div>
+        <div className="coverPreview">
+          <span>VISTA PREVIA</span>
+          <div className="miniHero">
+            <div><small>{draft.eyebrow}</small><h2>{draft.title}</h2><p>{draft.description}</p><div><b>{draft.primaryText}</b><b className="outline">{draft.secondaryText}</b></div></div>
+            <article><img src={draft.cardImage || '/wcd-logo.png'} alt="Vista previa" onError={(event) => { event.currentTarget.src = '/wcd-logo.png'; }} /><strong>{draft.cardText}</strong></article>
+          </div>
+          <a className="previewMarketplaceLink" href="/" target="_blank" rel="noreferrer">Abrir Marketplace para revisar</a>
+        </div>
+      </div>
+    </section>
+  </div>;
+}
+
+
+function AdminNewProductsSettings() {
+  const [draft, setDraft] = useState(getSavedNewProductsSettings);
+  const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState('');
+  const [message, setMessage] = useState('');
+  useEffect(() => { (async () => { const { data } = await supabase.from('products').select('item_number,item_code,description,brand').eq('active', true).order('item_number'); setRows(data || []); })(); }, []);
+  const selectedCodes = draft.selectedCodes || [];
+  const matches = rows.filter((row) => `${row.item_number || ''} ${row.item_code || ''} ${row.description || ''} ${row.brand || ''}`.toLowerCase().includes(search.toLowerCase().trim())).slice(0, 12);
+  function toggle(row) {
+    const code = String(row.item_number || row.item_code || '').trim();
+    const exists = selectedCodes.includes(code);
+    setDraft({ ...draft, selectedCodes: exists ? selectedCodes.filter((item) => item !== code) : [...selectedCodes, code] });
+  }
+  function save() {
+    localStorage.setItem('wcd_new_products_settings', JSON.stringify({ ...draft, limit: Number(draft.limit) || 12 }));
+    setMessage('Selección de Productos Nuevos guardada. Actualiza el Marketplace para verla.');
+    setTimeout(() => setMessage(''), 3500);
+  }
+  return <div className="adminContent"><section className="adminPanelCard simpleSettingsCard">
+    <div className="adminPanelHead"><div><span>HOME PROFESIONAL</span><h3>Productos Nuevos</h3></div><Sparkles size={25} /></div>
+    <p className="adminModuleIntro">Elige manualmente qué productos aparecen como nuevos usando el ITEM #, código, nombre o marca.</p>
+    <div className="settingsFormGrid">
+      <label className="toggleSetting"><input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} /><span><strong>Mostrar sección</strong><small>Activa o desactiva Productos Nuevos en el Inicio.</small></span></label>
+      <label><span>Título de la sección</span><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></label>
+      <label><span>Cantidad máxima</span><input type="number" min="1" max="24" value={draft.limit} onChange={(e) => setDraft({ ...draft, limit: e.target.value })} /></label>
+    </div>
+    <label className="productPickerSearch"><span>Buscar producto por código, ITEM # o nombre</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ejemplo: 1025, Raptor o Glucosoral" /></label>
+    <div className="productPickerList">{matches.map((row) => { const code = String(row.item_number || row.item_code || ''); const selected = selectedCodes.includes(code); return <button type="button" key={`${row.item_number}-${row.item_code}`} className={selected ? 'selected' : ''} onClick={() => toggle(row)}><span><strong>{row.item_code || row.description || 'Producto'}</strong><small>ITEM #{row.item_number} · {row.brand || 'Sin marca'}</small></span><b>{selected ? 'Seleccionado' : 'Agregar'}</b></button>; })}</div>
+    <div className="selectedProductsSummary"><strong>Seleccionados: {selectedCodes.length}</strong>{selectedCodes.length > 0 && <button type="button" onClick={() => setDraft({ ...draft, selectedCodes: [] })}>Limpiar selección</button>}</div>
+    <button className="adminPrimaryAction compact" onClick={save}><Save size={18} /> Guardar selección</button>{message && <div className="coverSaved">{message}</div>}
+  </section></div>;
+}
+function AdminFeaturedPromotionsSettings() {
+  const [draft, setDraft] = useState(
+    getSavedFeaturedPromotionsSettings
+  );
+  const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadPromotions() {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from('products')
+        .select(
+          'item_number,item_code,description,brand,promo_active,promo_text'
+        )
+        .eq('active', true)
+        .eq('promo_active', true)
+        .order('item_number');
+
+      if (error) {
+        console.error(
+          'Error cargando promociones destacadas:',
+          error
+        );
+        setRows([]);
+      } else {
+        setRows(data || []);
+      }
+
+      setLoading(false);
+    }
+
+    loadPromotions();
+  }, []);
+
+  const selectedCodes = draft.selectedCodes || [];
+
+  const matches = rows
+    .filter((row) => {
+      const searchableText = `
+        ${row.item_number || ''}
+        ${row.item_code || ''}
+        ${row.description || ''}
+        ${row.brand || ''}
+        ${row.promo_text || ''}
+      `.toLowerCase();
+
+      return searchableText.includes(
+        search.toLowerCase().trim()
+      );
+    })
+    .slice(0, 20);
+
+  function getProductCode(row) {
+    return String(
+      row.item_number || row.item_code || ''
+    ).trim();
+  }
+
+  function toggle(row) {
+    const code = getProductCode(row);
+    if (!code) return;
+
+    const exists = selectedCodes.includes(code);
+
+    setDraft({
+      ...draft,
+      selectedCodes: exists
+        ? selectedCodes.filter((item) => item !== code)
+        : [...selectedCodes, code],
+    });
+  }
+
+  function save() {
+    localStorage.setItem(
+      'wcd_featured_promotions_settings',
+      JSON.stringify({
+        ...draft,
+        limit: Number(draft.limit) || 3,
+      })
+    );
+
+    setMessage(
+      'Promociones destacadas guardadas. Actualiza el Marketplace para verlas.'
+    );
+
+    setTimeout(() => setMessage(''), 3500);
+  }
+
+  return (
+    <div className="adminContent">
+      <section className="adminPanelCard simpleSettingsCard">
+        <div className="adminPanelHead">
+          <div>
+            <span>HOME PROFESIONAL</span>
+            <h3>Promociones destacadas</h3>
+          </div>
+
+          <BadgePercent size={25} />
+        </div>
+
+        <p className="adminModuleIntro">
+          Selecciona manualmente las promociones que aparecerán
+          en la página de Inicio.
+        </p>
+
+        <div className="settingsFormGrid">
+          <label className="toggleSetting">
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  enabled: event.target.checked,
+                })
+              }
+            />
+
+            <span>
+              <strong>Mostrar sección</strong>
+              <small>
+                Activa o desactiva Promociones destacadas en
+                Inicio.
+              </small>
+            </span>
+          </label>
+
+          <label>
+            <span>Título de la sección</span>
+            <input
+              value={draft.title}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  title: event.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            <span>Cantidad máxima</span>
+            <input
+              type="number"
+              min="1"
+              max="12"
+              value={draft.limit}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  limit: event.target.value,
+                })
+              }
+            />
+          </label>
+        </div>
+
+        <label className="productPickerSearch">
+          <span>
+            Buscar promoción por código, ITEM #, producto o
+            marca
+          </span>
+
+          <input
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            placeholder="Ejemplo: Raptor, 1025 o Glucosoral"
+          />
+        </label>
+
+        {loading ? (
+          <p>Cargando promociones activas...</p>
+        ) : (
+          <div className="productPickerList">
+            {matches.map((row) => {
+              const code = getProductCode(row);
+              const selected = selectedCodes.includes(code);
+
+              return (
+                <button
+                  type="button"
+                  key={`${row.item_number}-${row.item_code}`}
+                  className={selected ? 'selected' : ''}
+                  onClick={() => toggle(row)}
+                >
+                  <span>
+                    <strong>
+                      {row.item_code ||
+                        row.description ||
+                        'Producto'}
+                    </strong>
+
+                    <small>
+                      ITEM #{row.item_number} ·{' '}
+                      {row.brand || 'Sin marca'}
+                    </small>
+
+                    {row.promo_text && (
+                      <small>{row.promo_text}</small>
+                    )}
+                  </span>
+
+                  <b>
+                    {selected ? 'Seleccionado' : 'Agregar'}
+                  </b>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {!loading && matches.length === 0 && (
+          <p className="adminModuleIntro">
+            No se encontraron productos con promoción activa.
+          </p>
+        )}
+
+        <div className="selectedProductsSummary">
+          <strong>
+            Seleccionadas: {selectedCodes.length}
+          </strong>
+
+          {selectedCodes.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  selectedCodes: [],
+                })
+              }
+            >
+              Limpiar selección
+            </button>
+          )}
+        </div>
+
+        <button
+          className="adminPrimaryAction compact"
+          onClick={save}
+        >
+          <Save size={18} />
+          Guardar selección
+        </button>
+
+        {message && (
+          <div className="coverSaved">{message}</div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function AdminHomePromotions() {
+  const [draft, setDraft] = useState(getSavedHomePromotions);
+  const [message, setMessage] = useState('');
+  function updatePromo(index, field, value) { setDraft((current) => current.map((promo, i) => i === index ? { ...promo, [field]: value } : promo)); }
+  function save() { localStorage.setItem('wcd_home_promotions', JSON.stringify(draft)); setMessage('Promociones del Home guardadas.'); setTimeout(() => setMessage(''), 2500); }
+  return <div className="adminContent"><section className="adminPanelCard promotionsAdminCard">
+    <div className="adminPanelHead"><div><span>HOME PROFESIONAL</span><h3>Promociones principales</h3></div><BadgePercent size={25} /></div>
+    <p className="adminModuleIntro">Configura hasta tres tarjetas promocionales con imagen, textos, color, enlace y vigencia.</p>
+    <div className="promoAdminGrid">{draft.slice(0,3).map((promo,index)=><article className="promoAdminItem" key={promo.id}>
+      <div className="promoAdminTitle"><strong>Promoción {index+1}</strong><label><input type="checkbox" checked={promo.active !== false} onChange={(e)=>updatePromo(index,'active',e.target.checked)} /> Activa</label></div>
+      <label><span>Título</span><input value={promo.title} onChange={(e)=>updatePromo(index,'title',e.target.value)} /></label>
+      <label><span>Descripción</span><textarea rows="3" value={promo.description} onChange={(e)=>updatePromo(index,'description',e.target.value)} /></label>
+      <label><span>Imagen</span><input value={promo.imageUrl} onChange={(e)=>updatePromo(index,'imageUrl',e.target.value)} /></label>
+      <div className="coverTwoFields"><label><span>Texto del botón</span><input value={promo.buttonText} onChange={(e)=>updatePromo(index,'buttonText',e.target.value)} /></label><label><span>Enlace</span><input value={promo.buttonUrl} onChange={(e)=>updatePromo(index,'buttonUrl',e.target.value)} /></label></div>
+      <div className="coverTwoFields"><label><span>Color</span><input type="color" value={promo.color} onChange={(e)=>updatePromo(index,'color',e.target.value)} /></label><label><span>Inicio</span><input type="date" value={promo.startDate} onChange={(e)=>updatePromo(index,'startDate',e.target.value)} /></label></div>
+      <label><span>Finalización</span><input type="date" value={promo.endDate} onChange={(e)=>updatePromo(index,'endDate',e.target.value)} /></label>
+    </article>)}</div>
+    <button className="adminPrimaryAction compact" onClick={save}><Save size={18} /> Guardar promociones</button>{message && <div className="coverSaved">{message}</div>}
+  </section></div>;
+}
+
+function AdminSectionsPreview() {
+  const [categories, setCategories] = useState([]);
+  const [settings, setSettings] = useState(getSavedCategorySettings);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  useEffect(() => { (async () => { const { data, error } = await supabase.from('products').select('section,category').eq('active', true); if (error) { setError(error.message); return; } setCategories([...new Set((data || []).map((row) => row.section || row.category).filter(Boolean))]); })(); }, []);
+  function update(category, field, value) { setSettings((current) => ({ ...current, [category]: { ...(current[category] || {}), [field]: value } })); }
+  function save() { localStorage.setItem('wcd_category_settings', JSON.stringify(settings)); setMessage('Íconos y colores guardados. Actualiza el Marketplace para ver los cambios.'); setTimeout(() => setMessage(''), 3500); }
+  return <div className="adminContent"><section className="adminPanelCard simpleSettingsCard">
+    <div className="adminPanelHead"><div><span>HOME PROFESIONAL</span><h3>Secciones del catálogo</h3></div><Grid3X3 size={25} /></div>
+    <p className="adminModuleIntro">Cambia el ícono SVG y el color de cada categoría. Los nombres siguen generándose desde los productos importados.</p>
+    {error ? <div className="coverSaved">No se pudieron cargar: {error}</div> : <div className="categorySettingsList">{categories.map((category, index) => { const current = settings[category] || {}; const iconName = current.icon || CATEGORY_ICON_NAMES[index % CATEGORY_ICON_NAMES.length]; const Icon = CATEGORY_ICONS[iconName]; const color = current.color || WCD_SECTION_COLORS[index % WCD_SECTION_COLORS.length]; return <article key={category}><span className="categorySettingsIcon" style={{ background: color }}><Icon size={27} /></span><strong>{category}</strong><label><span>Ícono SVG</span><select value={iconName} onChange={(e) => update(category, 'icon', e.target.value)}>{CATEGORY_ICON_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><label><span>Color</span><input type="color" value={color} onChange={(e) => update(category, 'color', e.target.value)} /></label></article>; })}</div>}
+    <button className="adminPrimaryAction compact" onClick={save}><Save size={18} /> Guardar secciones</button>{message && <div className="coverSaved">{message}</div>}
+  </section></div>;
 }
 
 function AdminPanel() {
@@ -923,7 +1472,41 @@ function AdminPanel() {
             <article className="adminPanelCard"><div className="adminPanelHead"><div><span>ACTUALIZACIÓN RÁPIDA</span><h3>Asistente del catálogo</h3></div><UploadCloud size={25} /></div><div className="adminSteps"><div><b>1</b><span><strong>Excel de productos</strong><small>Productos, precios y promociones</small></span></div><div><b>2</b><span><strong>Imágenes y marcas</strong><small>Validación automática por código</small></span></div><div><b>3</b><span><strong>Catálogo PDF</strong><small>Archivo vigente para clientes</small></span></div></div><button className="adminPrimaryAction" onClick={() => setActive('Importar Excel')}>Abrir asistente de actualización</button></article>
           </section>
           <section className="adminPanelCard adminActivity"><div className="adminPanelHead"><div><span>ACTIVIDAD RECIENTE</span><h3>Últimos cambios</h3></div><Clock3 size={24} /></div><div className="adminActivityRow"><span className="activityDot success" /><div><strong>Nivel público configurado en I9</strong><small>Supabase · Hoy</small></div><b>Completado</b></div><div className="adminActivityRow"><span className="activityDot" /><div><strong>Excel validado para 9 niveles de precio</strong><small>491 productos · 4,401 precios</small></div><b>Preparado</b></div><div className="adminActivityRow"><span className="activityDot warning" /><div><strong>Módulo de productos conectado</strong><small>Versión 2.2</small></div><b>En revisión</b></div></section>
-        </div> : active === 'Productos' ? <AdminProducts /> : <div className="adminContent"><section className="adminEmptyModule"><div className="adminEmptyIcon">{React.createElement(ADMIN_NAV.find(item => item.label === active)?.icon || Settings, { size: 32 })}</div><span>MÓDULO EN PREPARACIÓN</span><h2>{active}</h2><p>Esta pantalla forma parte del diseño aprobado. La conectaremos con Supabase en la siguiente etapa.</p><button onClick={() => setActive('Dashboard')}>Volver al Dashboard</button></section></div>}
+          </div>
+            : active === 'Productos'
+            ? <AdminProducts />
+            : active === 'Portada'
+            ? <AdminHeroSettings />
+            : active === 'Productos nuevos'
+            ? <AdminNewProductsSettings />
+            : active === 'Promociones destacadas'
+            ? <AdminFeaturedPromotionsSettings />
+            : active === 'Secciones'
+            ? <AdminSectionsPreview />
+            : (
+              <div className="adminContent">
+                <section className="adminEmptyModule">
+                  <div className="adminEmptyIcon">
+                    {React.createElement(
+                      ADMIN_NAV.find(item => item.label === active)?.icon || Settings,
+                      { size: 32 }
+                    )}
+                  </div>
+
+                  <span>MÓDULO EN PREPARACIÓN</span>
+                  <h2>{active}</h2>
+
+                  <p>
+                    Esta pantalla forma parte del diseño aprobado.
+                    La conectaremos con Supabase en la siguiente etapa.
+                  </p>
+
+                  <button onClick={() => setActive('Dashboard')}>
+                    Volver al Dashboard
+                  </button>
+                </section>
+               </div>
+         )}
       </main>
     </div>
   );

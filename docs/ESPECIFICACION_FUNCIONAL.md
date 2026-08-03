@@ -48,3 +48,16 @@ La columna `Price $` del archivo recibido está vacía en las 489 filas con prod
 - Indicadores de productos activos y faltantes de imagen.
 - Tabla paginada de solo lectura para validación inicial.
 - La edición directa se habilitará después de aprobar esta vista.
+
+## Avance Productos v2.3 (vista segura)
+- Ordenamiento por artículo, producto, marca, categoría, precio y estado.
+- Vista detallada del producto en ventana modal.
+- Copiar número de artículo al portapapeles.
+- Las acciones de edición y desactivación quedan bloqueadas hasta implementar autenticación y permisos.
+
+## Cambios v2.4 - Experiencia pública
+- Inicio muestra únicamente 3 promociones destacadas.
+- La sección Promociones muestra todas las promociones activas.
+- Botones de categorías usan la paleta WCD: #ff9500, #0268df, #35cf00, #b11eb8 y #db0087.
+- Tarjetas e imágenes de productos usan fondo blanco con divisores suaves.
+- Se agregó módulo Portada al panel administrativo. En esta etapa guarda una vista previa local; la publicación global quedará conectada a Supabase después del inicio de sesión y permisos.

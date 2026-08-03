@@ -1,10 +1,13 @@
-# WCD Marketplace 2.1
+# WCD Marketplace v2.4
 
-Home comercial, promociones, productos, búsqueda y carrito lateral de demostración.
+Incluye panel administrativo, consulta de productos, acciones de vista, promociones completas, paleta WCD en categorías, tarjetas blancas y editor preliminar de portada.
 
-Cloudflare: React Vite / npm run build / dist.
+## Prueba local
 
-## Ajuste de filtros de productos
-- Etiquetas visibles para búsqueda, marca, categoría y estado.
-- Botón para limpiar filtros y contador de filtros activos.
-- Detección visual de imágenes faltantes o dañadas.
+```bash
+npm install
+npm run dev
+```
+
+- Marketplace: `/`
+- Panel: `/admin`
