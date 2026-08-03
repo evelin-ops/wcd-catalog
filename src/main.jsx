@@ -179,6 +179,39 @@ function readLocalSettings(key, defaults) {
     return defaults;
   }
 }
+async function getCloudSetting(key, fallback) {
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Error cargando ${key}:`, error);
+    return fallback;
+  }
+
+  return data?.value ?? fallback;
+}
+
+async function saveCloudSetting(key, value) {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert(
+      {
+        key,
+        value,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'key',
+      }
+    );
+
+  if (error) {
+    throw error;
+  }
+}
 
 function getSavedNewProductsSettings() {
   return readLocalSettings('wcd_new_products_settings', DEFAULT_NEW_PRODUCTS_SETTINGS);
@@ -246,9 +279,10 @@ function App() {
   const [sellerName, setSellerName] = useState('');
   const [notes, setNotes] = useState('');
   const [heroSettings, setHeroSettings] = useState(getSavedHeroSettings);
-  const [newProductsSettings] = useState(getSavedNewProductsSettings);
+  const [newProductsSettings, setNewProductsSettings] = useState(getSavedNewProductsSettings);
   const [homePromotions] = useState(getSavedHomePromotions);
-  const [featuredPromotionsSettings] = useState(getSavedFeaturedPromotionsSettings);
+  const [featuredPromotionsSettings, setFeaturedPromotionsSettings,] = useState(getSavedFeaturedPromotionsSettings);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [categorySettings] = useState(getSavedCategorySettings);
   const [currentView, setCurrentView] = useState(() => {
     if (window.location.hash === '#promociones') return 'promotions';
@@ -261,6 +295,40 @@ function App() {
 
     const catalogPdfUrl =
     import.meta.env.VITE_CATALOG_PDF_URL || '';
+
+  useEffect(() => {
+   async function loadSharedHomeSettings() {
+    setSettingsLoading(true);
+
+    try {
+      const [
+        cloudNewProducts,
+        cloudFeaturedPromotions,
+      ] = await Promise.all([
+        getCloudSetting(
+          'new_products_settings',
+          getSavedNewProductsSettings()
+        ),
+        getCloudSetting(
+          'featured_promotions_settings',
+          getSavedFeaturedPromotionsSettings()
+        ),
+      ]);
+
+      setNewProductsSettings(cloudNewProducts);
+      setFeaturedPromotionsSettings(cloudFeaturedPromotions);
+    } catch (error) {
+      console.error(
+        'Error cargando configuración del Home:',
+        error
+      );
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
+  loadSharedHomeSettings();
+}, []);
 
   useEffect(() => {
     async function loadProducts() {
@@ -685,7 +753,7 @@ const promotions = products
                   </div>
                   <button className="sectionLink linkButton" onClick={() => navigateTo('products')}>Ver todos</button>
                 </div>
-                {loading ? <p>Cargando productos nuevos...</p> : newProducts.length ? (
+                {loading || settingsLoading ? <p>Cargando productos nuevos...</p> : newProducts.length ? (
                   <div className="grid">
                     {newProducts.map((product) => <Card key={`new-${product.id}`} p={product} onAdd={add} />)}
                   </div>
@@ -701,7 +769,7 @@ const promotions = products
                 <div><h2>Promociones destacadas</h2><p className="sub">Una selección de ofertas vigentes para tu negocio.</p></div>
                 <button className="sectionLink linkButton" onClick={() => navigateTo('promotions')}>Ver todas</button>
               </div>
-              {loading ? (<p>Cargando promociones...</p>) : featuredPromotions.length > 0 ? (
+              {loading || settingsLoading ? <p>Cargando promociones...</p> : featuredPromotions.length > 0 ? (
                 <div className="grid">{featuredPromotions.map((product) => (<Card key={product.id} p={product}onAdd={add} />))}</div>
                 ) : (<p className="sub">No hay promociones destacadas seleccionadas.</p>)}
             </section>
@@ -1122,7 +1190,31 @@ function AdminNewProductsSettings() {
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
-  useEffect(() => { (async () => { const { data } = await supabase.from('products').select('item_number,item_code,description,brand').eq('active', true).order('item_number'); setRows(data || []); })(); }, []);
+  useEffect(() => {async function loadNewProductsAdmin() {
+    const [
+      productsResult,
+      cloudSettings,
+    ] = await Promise.all([
+      supabase
+        .from('products')
+        .select(
+          'item_number,item_code,description,brand'
+        )
+        .eq('active', true)
+        .order('item_number'),
+
+        getCloudSetting(
+        'new_products_settings',
+        getSavedNewProductsSettings()
+      ),
+    ]);
+
+    setRows(productsResult.data || []);
+    setDraft(cloudSettings);
+  }
+
+  loadNewProductsAdmin();
+}, []);
   const selectedCodes = draft.selectedCodes || [];
   const matches = rows.filter((row) => `${row.item_number || ''} ${row.item_code || ''} ${row.description || ''} ${row.brand || ''}`.toLowerCase().includes(search.toLowerCase().trim())).slice(0, 12);
   function toggle(row) {
@@ -1130,11 +1222,41 @@ function AdminNewProductsSettings() {
     const exists = selectedCodes.includes(code);
     setDraft({ ...draft, selectedCodes: exists ? selectedCodes.filter((item) => item !== code) : [...selectedCodes, code] });
   }
-  function save() {
-    localStorage.setItem('wcd_new_products_settings', JSON.stringify({ ...draft, limit: Number(draft.limit) || 12 }));
-    setMessage('Selección de Productos Nuevos guardada. Actualiza el Marketplace para verla.');
-    setTimeout(() => setMessage(''), 3500);
+async function save() {
+  const cleanSettings = {
+    ...draft,
+    limit: Number(draft.limit) || 12,
+  };
+
+  try {
+    await saveCloudSetting(
+      'new_products_settings',
+      cleanSettings
+    );
+
+    localStorage.setItem(
+      'wcd_new_products_settings',
+      JSON.stringify(cleanSettings)
+    );
+
+    setDraft(cleanSettings);
+
+    setMessage(
+      'Productos Nuevos guardados en Supabase para todos los usuarios.'
+    );
+  } catch (error) {
+    console.error(
+      'Error guardando Productos Nuevos:',
+      error
+    );
+
+    setMessage(
+      `No se pudo guardar: ${error.message}`
+    );
   }
+
+  setTimeout(() => setMessage(''), 3500);
+}
   return <div className="adminContent"><section className="adminPanelCard simpleSettingsCard">
     <div className="adminPanelHead"><div><span>HOME PROFESIONAL</span><h3>Productos Nuevos</h3></div><Sparkles size={25} /></div>
     <p className="adminModuleIntro">Elige manualmente qué productos aparecen como nuevos usando el ITEM #, código, nombre o marca.</p>
