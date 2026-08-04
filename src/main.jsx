@@ -1281,32 +1281,54 @@ function AdminFeaturedPromotionsSettings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadPromotions() {
-      setLoading(true);
+    async function loadPromotionsAdmin() {
+       setLoading(true);
 
-      const { data, error } = await supabase
-        .from('products')
-        .select(
-          'item_number,item_code,description,brand,promo_active,promo_text'
-        )
-        .eq('active', true)
-        .eq('promo_active', true)
-        .order('item_number');
+      try {
+       const [
+         productsResult,
+         cloudSettings,
+       ] = await Promise.all([
+           supabase
+           .from('products')
+           .select(
+             'item_number,item_code,description,brand,promo_active,promo_text'
+           )
+          .eq('active', true)
+          .eq('promo_active', true)
+          .order('item_number'),
 
-      if (error) {
-        console.error(
-          'Error cargando promociones destacadas:',
-          error
+          getCloudSetting(
+           'featured_promotions_settings',
+          getSavedFeaturedPromotionsSettings()
+          ),
+        ]);
+
+        if (productsResult.error) {
+          console.error(
+           'Error cargando promociones destacadas:',
+          productsResult.error
         );
-        setRows([]);
-      } else {
-        setRows(data || []);
-      }
 
-      setLoading(false);
+        setRows([]);
+       } else {
+         setRows(productsResult.data || []);
+       }
+
+       setDraft(cloudSettings);
+      } catch (error) {
+        console.error(
+         'Error cargando configuración de promociones:',
+         error
+        );
+
+        setRows([]);
+      } finally {
+         setLoading(false);
+      }
     }
 
-    loadPromotions();
+     loadPromotionsAdmin();
   }, []);
 
   const selectedCodes = draft.selectedCodes || [];
@@ -1347,18 +1369,38 @@ function AdminFeaturedPromotionsSettings() {
     });
   }
 
-  function save() {
-    localStorage.setItem(
-      'wcd_featured_promotions_settings',
-      JSON.stringify({
-        ...draft,
-        limit: Number(draft.limit) || 3,
-      })
-    );
+  async function save() {
+    const cleanSettings = {
+    ...draft,
+    limit: Number(draft.limit) || 3,
+    };
 
-    setMessage(
-      'Promociones destacadas guardadas. Actualiza el Marketplace para verlas.'
-    );
+    try {
+      await saveCloudSetting(
+      'featured_promotions_settings',
+      cleanSettings
+      );
+
+      localStorage.setItem(
+      'wcd_featured_promotions_settings',
+      JSON.stringify(cleanSettings)
+      );
+
+      setDraft(cleanSettings);
+
+      setMessage(
+        'Promociones destacadas guardadas en Supabase para todos los usuarios.'
+      );
+    } catch (error) {
+      console.error(
+      'Error guardando Promociones destacadas:',
+      error
+      );
+
+      setMessage(
+      `No se pudo guardar: ${error.message}`
+      );
+    }
 
     setTimeout(() => setMessage(''), 3500);
   }
