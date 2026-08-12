@@ -302,19 +302,25 @@ function App() {
 
     try {
       const [
+        cloudHeroSettings,
         cloudNewProducts,
         cloudFeaturedPromotions,
-      ] = await Promise.all([
-        getCloudSetting(
-          'new_products_settings',
-          getSavedNewProductsSettings()
-        ),
-        getCloudSetting(
-          'featured_promotions_settings',
-          getSavedFeaturedPromotionsSettings()
-        ),
-      ]);
+       ] = await Promise.all([
+       getCloudSetting(
+         'hero_settings',
+         getSavedHeroSettings()
+       ),
+       getCloudSetting(
+         'new_products_settings',
+         getSavedNewProductsSettings()
+       ),
+       getCloudSetting(
+         'featured_promotions_settings',
+         getSavedFeaturedPromotionsSettings()
+       ),
+     ]);
 
+      setHeroSettings(cloudHeroSettings);
       setNewProductsSettings(cloudNewProducts);
       setFeaturedPromotionsSettings(cloudFeaturedPromotions);
     } catch (error) {
@@ -1138,11 +1144,34 @@ function AdminHeroSettings() {
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
-  function savePreview() {
-    localStorage.setItem('wcd_hero_settings', JSON.stringify(draft));
-    setSavedMessage('Portada guardada en este navegador.');
+  async function savePreview() {
+    try {
+      await saveCloudSetting(
+      'hero_settings',
+      draft
+       );
+
+      localStorage.setItem(
+      'wcd_hero_settings',
+      JSON.stringify(draft)
+       );
+
+      setSavedMessage(
+      'Portada guardada en Supabase para todos los usuarios.'
+       );
+     } catch (error) {
+       console.error(
+        'Error guardando la portada:',
+       error
+     );
+
+     setSavedMessage(
+       `No se pudo guardar: ${error.message}`
+     );
+   }
+
     setTimeout(() => setSavedMessage(''), 2500);
-  }
+ }
 
   function restoreDefaults() {
     setDraft(DEFAULT_HERO_SETTINGS);
