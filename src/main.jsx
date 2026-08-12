@@ -306,6 +306,7 @@ function App() {
         cloudHeroSettings,
         cloudNewProducts,
         cloudFeaturedPromotions,
+        cloudCategorySettings,
        ] = await Promise.all([
        getCloudSetting(
          'hero_settings',
@@ -1145,6 +1146,54 @@ function AdminProducts() {
 function AdminHeroSettings() {
   const [draft, setDraft] = useState(getSavedHeroSettings);
   const [savedMessage, setSavedMessage] = useState('');
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  useEffect(() => {
+    async function loadHeroSettingsAdmin() {
+      setLoadingSettings(true);
+
+      try {
+        const cloudSettings = await getCloudSetting(
+          'hero_settings',
+         DEFAULT_HERO_SETTINGS
+        );
+
+        const isValidHero =
+          cloudSettings &&
+          typeof cloudSettings === 'object' &&
+          typeof cloudSettings.title === 'string' &&
+         (
+           typeof cloudSettings.eyebrow === 'string' ||
+           typeof cloudSettings.description === 'string' ||
+           typeof cloudSettings.cardText === 'string'
+         );
+
+        const validHeroSettings = isValidHero
+         ? {
+             ...DEFAULT_HERO_SETTINGS,
+             ...cloudSettings,
+           }
+         : DEFAULT_HERO_SETTINGS;
+
+      setDraft(validHeroSettings);
+       localStorage.setItem(
+         'wcd_hero_settings',
+         JSON.stringify(validHeroSettings)
+       );
+     } catch (error) {
+       console.error(
+          'Error cargando la portada desde Supabase:',
+         error
+        );
+
+       setDraft(DEFAULT_HERO_SETTINGS);
+     } finally {
+       setLoadingSettings(false);
+     }
+   }
+
+   loadHeroSettingsAdmin();
+ }, []);
 
   function updateField(field, value) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -1628,41 +1677,92 @@ function AdminHomePromotions() {
   </section></div>;
 }
 
+function isValidCategorySettings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const wrongKeys = [
+    'limit',
+    'title',
+    'enabled',
+    'selectedCodes',
+    'eyebrow',
+    'description',
+    'cardText',
+    'cardImage',
+  ];
+
+  if (wrongKeys.some((key) => key in value)) {
+    return false;
+  }
+
+  return true;
+}
+
 function AdminSectionsPreview() {
   const [categories, setCategories] = useState([]);
-  const [settings, setSettings] = useState(getSavedCategorySettings);
+  const [settings, setSettings] = useState(() => {
+    const saved = getSavedCategorySettings();
+
+    return isValidCategorySettings(saved)
+    ? saved
+    : {};
+  });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   useEffect(() => { (async () => { const { data, error } = await supabase.from('products').select('section,category').eq('active', true); if (error) { setError(error.message); return; } setCategories([...new Set((data || []).map((row) => row.section || row.category).filter(Boolean))]); })(); }, []);
   function update(category, field, value) { setSettings((current) => ({ ...current, [category]: { ...(current[category] || {}), [field]: value } })); }
   async function save() {
-    try {
-      await saveCloudSetting(
-        'category_settings',
-       settings
-     );
+    const cleanSettings = {};
 
-      localStorage.setItem(
-        'wcd_category_settings',
-       JSON.stringify(settings)
-     );
+    categories.forEach((category, index) => {
+      const current = settings[category] || {};
+
+      cleanSettings[category] = {
+         icon:
+          current.icon ||
+          CATEGORY_ICON_NAMES[
+             index % CATEGORY_ICON_NAMES.length
+          ],
+         color:
+          current.color ||
+          WCD_SECTION_COLORS[
+            index % WCD_SECTION_COLORS.length
+          ],
+       };
+     });
+
+     try {
+       await saveCloudSetting(
+         'category_settings',
+         cleanSettings
+       );
+
+       localStorage.setItem(
+         'wcd_category_settings',
+         JSON.stringify(cleanSettings)
+       );
+
+       setSettings(cleanSettings);
 
       setMessage(
-        'Secciones guardadas en Supabase para todos los usuarios.'
-     );
+        'Secciones guardadas correctamente en Supabase para todos los usuarios.'
+      );
    } catch (error) {
-     console.error(
+      console.error(
         'Error guardando las secciones:',
        error
-     );
+      );
 
-     setMessage(
-       `No se pudo guardar: ${error.message}`
-     );
-   }
+      setMessage(
+        `No se pudo guardar: ${error.message}`
+      );
+   } 
 
    setTimeout(() => setMessage(''), 3500);
  }
+
   return <div className="adminContent"><section className="adminPanelCard simpleSettingsCard">
     <div className="adminPanelHead"><div><span>HOME PROFESIONAL</span><h3>Secciones del catálogo</h3></div><Grid3X3 size={25} /></div>
     <p className="adminModuleIntro">Cambia el ícono SVG y el color de cada categoría. Los nombres siguen generándose desde los productos importados.</p>
