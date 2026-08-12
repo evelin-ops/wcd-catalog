@@ -283,7 +283,8 @@ function App() {
   const [homePromotions] = useState(getSavedHomePromotions);
   const [featuredPromotionsSettings, setFeaturedPromotionsSettings,] = useState(getSavedFeaturedPromotionsSettings);
   const [settingsLoading, setSettingsLoading] = useState(true);
-  const [categorySettings] = useState(getSavedCategorySettings);
+  const [categorySettings, setCategorySettings] =
+  useState(getSavedCategorySettings);
   const [currentView, setCurrentView] = useState(() => {
     if (window.location.hash === '#promociones') return 'promotions';
     if (window.location.hash === '#productos') return 'products';
@@ -318,11 +319,16 @@ function App() {
          'featured_promotions_settings',
          getSavedFeaturedPromotionsSettings()
        ),
+       getCloudSetting(
+         'category_settings',
+         getSavedCategorySettings()
+       ),
      ]);
 
       setHeroSettings(cloudHeroSettings);
       setNewProductsSettings(cloudNewProducts);
       setFeaturedPromotionsSettings(cloudFeaturedPromotions);
+      setCategorySettings(cloudCategorySettings);
     } catch (error) {
       console.error(
         'Error cargando configuración del Home:',
@@ -1629,7 +1635,34 @@ function AdminSectionsPreview() {
   const [message, setMessage] = useState('');
   useEffect(() => { (async () => { const { data, error } = await supabase.from('products').select('section,category').eq('active', true); if (error) { setError(error.message); return; } setCategories([...new Set((data || []).map((row) => row.section || row.category).filter(Boolean))]); })(); }, []);
   function update(category, field, value) { setSettings((current) => ({ ...current, [category]: { ...(current[category] || {}), [field]: value } })); }
-  function save() { localStorage.setItem('wcd_category_settings', JSON.stringify(settings)); setMessage('Íconos y colores guardados. Actualiza el Marketplace para ver los cambios.'); setTimeout(() => setMessage(''), 3500); }
+  async function save() {
+    try {
+      await saveCloudSetting(
+        'category_settings',
+       settings
+     );
+
+      localStorage.setItem(
+        'wcd_category_settings',
+       JSON.stringify(settings)
+     );
+
+      setMessage(
+        'Secciones guardadas en Supabase para todos los usuarios.'
+     );
+   } catch (error) {
+     console.error(
+        'Error guardando las secciones:',
+       error
+     );
+
+     setMessage(
+       `No se pudo guardar: ${error.message}`
+     );
+   }
+
+   setTimeout(() => setMessage(''), 3500);
+ }
   return <div className="adminContent"><section className="adminPanelCard simpleSettingsCard">
     <div className="adminPanelHead"><div><span>HOME PROFESIONAL</span><h3>Secciones del catálogo</h3></div><Grid3X3 size={25} /></div>
     <p className="adminModuleIntro">Cambia el ícono SVG y el color de cada categoría. Los nombres siguen generándose desde los productos importados.</p>
